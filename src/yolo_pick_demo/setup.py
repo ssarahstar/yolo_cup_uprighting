@@ -28,10 +28,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'yolo_pick = yolo_pick_demo.yolo_pick_node:main',
             'yolo_pick_moveit = yolo_pick_demo.yolo_pick_moveit_node:main',
-            'yolo_pick_sort_moveit = yolo_pick_demo.yolo_pick_sort_moveit_node:main',
-            'yolo_pick_box_moveit = yolo_pick_demo.yolo_pick_box_moveit_node:main',
+            'yolo_cup_uprighting = yolo_pick_demo.yolo_cup_uprighting_node:main',
         ],
     },
 )

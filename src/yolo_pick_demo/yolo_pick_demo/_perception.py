@@ -5,8 +5,9 @@ Hand-Eye 행렬, pixel→base 변환, YOLO 검출을 함수로 제공.
 
 from pathlib import Path
 
-import cv2  # noqa: F401  (consumers may need it; keep for completeness)
+import cv2  
 import numpy as np
+
 from ament_index_python.packages import get_package_share_directory
 
 from . import _config as cfg
@@ -114,3 +115,29 @@ def run_yolo(yolo, frame: np.ndarray, depth_image=None) -> list[dict]:
         })
 
     return detections
+
+
+
+def calculate_cup_orientation(depth_image, bbox, frame=None):
+    """
+    YOLO Bounding Box 또는 영상 데이터를 받아 컵이 누워있는 각도(theta, 라디안)를 계산
+    추후 세그멘테이션 마스크 / 정밀 PCA 알고리즘 연동 예정
+    """
+    # 1. Bounding Box 정보 추출
+    x1, y1, x2, y2 = bbox
+    
+    # 임시 알고리즘 (현재 단계): 박스의 가로/세로 비율을 통해 단순 각도 추정
+    # 가로가 길면 x축과 평행(0도), 세로가 길면 y축과 평행(90도)하다고 가정
+    width = x2 - x1
+    height = y2 - y1
+    
+    if width > height:
+        theta = 0.0  # 누워있는 상태 (가로)s
+    else:
+        theta = np.pi / 2.0  # 누워있는 상태 (세로)
+        
+    # TODO (추후 확장): frame ROI를 잘라내어 cv2.PCACompute 또는 cv2.fitLine 적용
+    # roi = frame[y1:y2, x1:x2]
+    # ... 이미지 처리 및 외곽선 추출 로직 ...
+    
+    return theta

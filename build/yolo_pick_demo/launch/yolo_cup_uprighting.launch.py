@@ -1,0 +1,1 @@
+/home/ssu/yolo_cup_ws/src/yolo_pick_demo/launch/yolo_cup_uprighting.launch.py

@@ -1,0 +1,1 @@
+/home/ssu/yolo_cup_ws/src/yolo_pick_demo/setup.py

@@ -41,7 +41,7 @@ TOOLCHARGER_IP   = "192.168.1.1"
 TOOLCHARGER_PORT = 502
 
 # ── YOLO ────────────────────────────────────────────
-YOLO_MODEL_PATH    = "/home/ssu/yolo_pick_ws/best.pt"
+YOLO_MODEL_PATH = "/home/ssu/yolo_cup_ws/best.pt"
 YOLO_CONF_THRESH   = 0.5
 AUTO_PICK_INTERVAL = 3.0    # 자동 모드 픽 간격 [s]
 
