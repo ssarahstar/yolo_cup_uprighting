@@ -1,4 +1,0 @@
-[console_scripts]
-yolo_cup_uprighting = yolo_pick_demo.yolo_cup_uprighting_node:main
-yolo_pick_moveit = yolo_pick_demo.yolo_pick_moveit_node:main
-

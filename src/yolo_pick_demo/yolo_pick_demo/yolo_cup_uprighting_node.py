@@ -15,7 +15,7 @@ from ._motion import get_gripper_pose_by_cup
 
 # =====================================================================
 # 테스트 토글: 카메라와 욜로가 없어도 모션을 테스트하려면 True로 설정
-USE_MOCK_VISION = True 
+USE_MOCK_VISION = False
 # =====================================================================
 
 CUP_LENGTH_M = 0.12  
@@ -42,27 +42,31 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
 
     def __init__(self):
         super().__init__()
-        if USE_MOCK_VISION:
-            self.get_logger().info("가상 모드: 통신 우회를 위해 Mock Gripper를 활성화합니다.")
-            self.gripper = MockGripper()
+        #if USE_MOCK_VISION:
+            #self.get_logger().info("가상 모드: 통신 우회를 위해 Mock Gripper를 활성화합니다.")
+            #self.gripper = MockGripper()
             # Action Server가 완전히 준비될 때까지 약간의 대기 시간(딜레이)을 줍니다.
-            time.sleep(2.0)
+            #time.sleep(2.0)
 
+    
     def _select_target(self, detections):
         """
-        'toppled_cup' (쓰러진 컵) 클래스 중 신뢰도가 가장 높은 객체 선택
-        (현재 YOLO 모델 컵/뚜껑만 구분 , 추후 클래스 ID 변경 예정)
+        현재 YOLO 모델의 실제 클래스 이름('cup')을 찾아 신뢰도가 가장 높은 객체를 선택
         """
         if not detections:
             return None
             
-        # 추후 'toppled_cup'으로 명명한 클래스만 필터링
-        target_candidates = [d for d in detections if d["cls_name"] == "toppled_cup"]
+        # 1. 어떤 클래스들이 들어오는지 확인하기 위한 임시 프린트문
+        # print("현재 화면에 보이는 객체들:", [d["cls_name"] for d in detections])
+            
+        
+        target_candidates = [d for d in detections if d["cls_name"] == "cup"] 
         
         if not target_candidates:
             return None
             
         return max(target_candidates, key=lambda d: d["conf"])
+    
     
     def run_yolo(self, frame):
         """MOCK 모드일 경우 가상의 쓰러진 컵 데이터를 반환, 아니면 부모(진짜 YOLO) 호출"""
@@ -193,30 +197,30 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
     # [임시 테스트용] p키 입력 대기를 무시하고 자동 실행하는 함수
 
     # ==========================================================
-    def run(self):
-        import time
-        import rclpy
-        import numpy as np
+    # def run(self):
+    #     import time
+    #     import rclpy
+    #     import numpy as np
 
-        self.get_logger().info("==== [자동 테스트 모드] ====")
+    #     self.get_logger().info("==== [자동 테스트 모드] ====")
         
-        # 1. 로봇 초기화 및 Home 위치 이동 (부모 클래스의 필수 기능 실행)
-        if hasattr(self, 'initialize_home'):
-            self.initialize_home()
+    #     # 1. 로봇 초기화 및 Home 위치 이동 (부모 클래스의 필수 기능 실행)
+    #     if hasattr(self, 'initialize_home'):
+    #         self.initialize_home()
             
-        self.get_logger().info("3초 뒤 컵 구출 시퀀스를 자동으로 시작합니다...")
-        time.sleep(3.0)
+    #     self.get_logger().info("3초 뒤 컵 구출 시퀀스를 자동으로 시작합니다...")
+    #     time.sleep(3.0)
         
-        # 2. 카메라가 없으므로 가상의 빈 이미지(dummy)를 만들어서 강제 전달
-        dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        self.detect_and_pick(dummy_frame)
+    #     # 2. 카메라가 없으므로 가상의 빈 이미지(dummy)를 만들어서 강제 전달
+    #     dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    #     self.detect_and_pick(dummy_frame)
         
-        self.get_logger().info("==== [테스트 시퀀스 완료] ====")
-        self.get_logger().info("RViz 화면을 확인할 수 있도록 노드를 끄지 않고 유지합니다.")
+    #     self.get_logger().info("==== [테스트 시퀀스 완료] ====")
+    #     self.get_logger().info("RViz 화면을 확인할 수 있도록 노드를 끄지 않고 유지합니다.")
         
-        # 3. 모션이 끝나고 프로그램이 바로 꺼지지 않도록 대기 상태 유지
-        while rclpy.ok():
-            rclpy.spin_once(self, timeout_sec=0.1)
+    #     # 3. 모션이 끝나고 프로그램이 바로 꺼지지 않도록 대기 상태 유지
+    #     while rclpy.ok():
+    #         rclpy.spin_once(self, timeout_sec=0.1)
 
 
 def main(args=None):

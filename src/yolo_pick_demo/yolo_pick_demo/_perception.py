@@ -117,27 +117,40 @@ def run_yolo(yolo, frame: np.ndarray, depth_image=None) -> list[dict]:
     return detections
 
 
-
 def calculate_cup_orientation(depth_image, bbox, frame=None):
     """
-    YOLO Bounding Box 또는 영상 데이터를 받아 컵이 누워있는 각도(theta, 라디안)를 계산
-    추후 세그멘테이션 마스크 / 정밀 PCA 알고리즘 연동 예정
+    OpenCV를 이용해 Bounding Box 내부의 실제 컵 기울기(theta)를 정밀 추출합니다.
     """
-    # 1. Bounding Box 정보 추출
-    x1, y1, x2, y2 = bbox
+    if frame is None:
+        return 0.0
+
+    # 1. Bounding Box 좌표를 정수로 변환하여 ROI(관심 영역) 자르기
+    x1, y1, x2, y2 = map(int, bbox)
+    roi = frame[y1:y2, x1:x2]
     
-    # 임시 알고리즘 (현재 단계): 박스의 가로/세로 비율을 통해 단순 각도 추정
-    # 가로가 길면 x축과 평행(0도), 세로가 길면 y축과 평행(90도)하다고 가정
-    width = x2 - x1
-    height = y2 - y1
-    
-    if width > height:
-        theta = 0.0  # 누워있는 상태 (가로)s
-    else:
-        theta = np.pi / 2.0  # 누워있는 상태 (세로)
-        
-    # TODO (추후 확장): frame ROI를 잘라내어 cv2.PCACompute 또는 cv2.fitLine 적용
-    # roi = frame[y1:y2, x1:x2]
-    # ... 이미지 처리 및 외곽선 추출 로직 ...
-    
+    if roi.size == 0:
+        return 0.0
+
+    # 2. 이미지를 흑백으로 변환하고 이진화(Threshold)하여 컵과 배경 분리
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+    # 3. 외곽선(Contours) 찾기
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return 0.0
+
+    # 4. 가장 넓은 외곽선을 컵의 본체로 간주
+    c = max(contours, key=cv2.contourArea)
+
+    # 5. 외곽선을 감싸는 기울어진 사각형(RotatedRect) 생성
+    rect = cv2.minAreaRect(c)
+    (cx, cy), (w, h), angle = rect
+
+    # 6. OpenCV angle 보정 (긴 축이 컵의 방향이 되도록 기준 정렬)
+    if w < h:
+        angle += 90.0  
+
+    # 7. Degree를 Radian으로 변환하여 반환
+    theta = np.deg2rad(angle)
     return theta
