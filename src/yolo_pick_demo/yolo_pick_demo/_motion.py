@@ -78,13 +78,14 @@ def plan_and_execute(robot, arm, logger,
 
 def get_gripper_pose_by_cup(cup_theta):
     """
-    컵의 주축 각도(theta)를 받아 그리퍼가 수직 진입할 수 있는 쿼터니언(dict) 반환
+    컵의 주축 각도(theta)를 받아 그리퍼가 옆면(허리)을 수직 진입하여 
+    파지할 수 있도록 쿼터니언 반환
     """
-    # 그리퍼는 항상 바닥을 수직으로 바라봄 (Roll=180, Pitch=0)
-    # Yaw 각도는 컵의 각도(cup_theta)에 90도(pi/2)를 더해 손가락이 컵의 지름을 덮도록 정렬
-    yaw = cup_theta + (np.pi / 2.0)
 
-    # 오일러 각을 쿼터니언으로 변환 (scipy Rotation 활용)
+    yaw = cup_theta 
+
+    # 오일러 각을 쿼터니언으로 변환
+    # (Roll=180, Pitch=0 상태에서 Yaw축만 조향)
     quat = R.from_euler('xyz', [180, 0, np.degrees(yaw)], degrees=True).as_quat()
     
     ori_dict = {

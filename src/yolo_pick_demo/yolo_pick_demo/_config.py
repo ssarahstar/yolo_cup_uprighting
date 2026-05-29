@@ -25,7 +25,7 @@ HOME_JOINTS = {
 SAFE_X_MIN = 0.0
 SAFE_Y_MIN = -0.30
 SAFE_Y_MAX =  0.30
-SAFE_Z_MIN =  0.25
+SAFE_Z_MIN =  0.01
 
 # ── Pick 파라미터 (m) ────────────────────────────────
 Z_OFFSET = 0.20    # gripper tip ↔ link_6 (depth 측정 base z + 이 값 = pick_z)

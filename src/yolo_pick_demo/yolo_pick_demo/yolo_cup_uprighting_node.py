@@ -1,7 +1,6 @@
 
 #!/usr/bin/env python3
 """
-yolo_cup_recover_node.py
 쓰러진 컵을 인식하고 보정된 오프셋으로 똑바로 세우는(Uprighting) 시나리오 노드.
 """
 
@@ -12,6 +11,8 @@ from . import _config as cfg
 from ._base_node import BaseMoveItPickNode, run_node
 from ._perception import calculate_cup_orientation
 from ._motion import get_gripper_pose_by_cup
+from scipy.spatial.transform import Rotation as R
+
 
 # =====================================================================
 # 테스트 토글: 카메라와 욜로가 없어도 모션을 테스트하려면 True로 설정
@@ -56,10 +57,6 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         if not detections:
             return None
             
-        # 1. 어떤 클래스들이 들어오는지 확인하기 위한 임시 프린트문
-        # print("현재 화면에 보이는 객체들:", [d["cls_name"] for d in detections])
-            
-        
         target_candidates = [d for d in detections if d["cls_name"] == "cup"] 
         
         if not target_candidates:
@@ -109,13 +106,11 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         if base is None:
             log.error("픽셀 -> 베이스 3D 좌표 변환 실패.")
             return
-            s
         bx, by, bz = base
         
         # 각도 추출
         if USE_MOCK_VISION:
-            #cup_theta = np.pi / 4.0 
-            #실제 로봇의 Yaw 각도(-26.91도)를 재현하기 위한 컵 각도 역산 적용
+        
             cup_theta = np.radians(-116.91)
         else:
             cup_theta = calculate_cup_orientation(self.depth_image, target["box"], frame)
@@ -126,102 +121,148 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         finally:
             self.picking = False
 
+    
+        
+    # def move_to_observation_pose(self):
+
+    #     log = self.get_logger()
+    #     log.info("[Init] 테이블 관찰 자세로 이동 중...")
+        
+    #     # 1. 제시된 조인트 각도(도 단위) 및 라디안 변환
+    #     joint_deg = [3.0, -12.7, 44.0, -9.0, 133.0, 90.0]
+    #     joint_values = [np.deg2rad(angle) for angle in joint_deg]
+
+    #     # 2. manipulator 플래닝 컴포넌트 준비
+    #     arm_component = self.robot.get_planning_component("manipulator")
+    #     arm_component.set_start_state_to_current_state()
+        
+    #     goal_state = arm_component.get_start_state()
+        
+    #     # 가져온 상태 객체의 'manipulator' 관절 그룹에 목표 각도를 덮어씌웁니다.
+    #     goal_state.set_joint_group_positions("manipulator", joint_values)
+    #     goal_state.update() # 상태 갱신
+        
+    #     # 완성된 상태 객체를 플래너의 목표(Goal)로 설정합니다.
+    #     arm_component.set_goal_state(robot_state=goal_state)
+    #     # ==========================================================
+        
+    #     # 3. 경로 플래닝 및 실행
+    #     plan_result = arm_component.plan()
+
+    #     if plan_result:
+    #         log.info("관찰 자세 경로 생성 성공. 이동을 시작합니다.")
+    #         self.robot.execute("manipulator", plan_result.trajectory)
+    #         time.sleep(1.5) # 로봇이 완전히 멈출 때까지 대기
+    #         return True
+    #     else:
+    #         log.error("관찰 자세 플래닝 실패!")
+    #         return False
+       
+
 
     def _pick_and_straighten(self, bx, by, bz, cup_theta):
         log = self.get_logger()
         
-        # 컵의 쓰러진 각도에 맞춘 그리퍼 진입 쿼터니언 계산
         target_ori = get_gripper_pose_by_cup(cup_theta)
+
+     
+        TABLE_Z = 0.0 
+        floor_z = TABLE_Z
+
+
+        Z_OFFSET = cfg.Z_OFFSET  # 0.20m (20cm)
+
+        PICK_CLEARANCE = 0.02 
         
-        # 정밀 파지 및 안착 높이(Z) 계산 (지름 데이터 적용!)
-        # bz는 컵 표면 최상단의 높이이므로, 반지름(3.6cm)만큼 내려가야 컵의 중심축입니다.
-        pick_z = bz - CUP_RADIUS_M
+        pick_z = floor_z + CUP_RADIUS_M + Z_OFFSET + PICK_CLEARANCE
+        place_z = floor_z + (CUP_LENGTH_M / 2.0) + Z_OFFSET
         
-        # 바닥의 절대 높이 = 컵 중심축 높이 - 반지름
-        floor_z = pick_z - CUP_RADIUS_M
+        safe_z = floor_z + 0.25 + Z_OFFSET
         
-        # 세웠을 때 로봇이 유지해야 할 높이 = 바닥 높이 + 컵 길이의 절반
-        place_z = floor_z + (CUP_LENGTH_M / 2.0)
+        log.info(f"== 컵 구출 시퀀스 준비 (각도: {np.degrees(cup_theta):.1f}도) ==")
+          
+
+
+        log.info("[1-1] 상공 진입 (Z=25cm)")
         
-        log.info(f"== 컵 구출 시퀀스 시작 (각도: {np.degrees(cup_theta):.1f}도) ==")
+        arm_component = self.robot.get_planning_component("manipulator")
+        arm_component.set_start_state_to_current_state()
+        current_state = arm_component.get_start_state()
         
-        # 1. 컵 상공 진입 (충돌 방지를 위해 미리 그리퍼를 9cm 너비로 엽니다)
-        log.info("[1] Approach (Opening gripper to 90mm)")
-        self.gripper.move_gripper(900)  # RG2 단위: 1/10 mm -> 900 = 90mm
-        time.sleep(0.5)
-        self.plan_pose(bx, by, pick_z + 0.1, target_ori)
+        # 'link_6' 끝단의 현재 공간 좌표와 방향(Quaternion) 추출
+        current_pose = current_state.get_pose("link_6") 
         
-        # 2. 중심축까지 하강 및 파지
-        log.info(f"[2] Descend to center axis (Z: {pick_z:.3f}) & Grip")
+        current_ori = {
+            "x": current_pose.orientation.x,
+            "y": current_pose.orientation.y,
+            "z": current_pose.orientation.z,
+            "w": current_pose.orientation.w
+        }
+        
+        # 추출한 현재 방향(current_ori)을 유지하면서 Z축만 상공으로 이동
+        self.plan_pose(bx, by, safe_z, current_ori)
+        time.sleep(1.0)
+
+
+        log.info("[1-2] 상공에서 컵 방향으로 정렬")
+        self.plan_pose(bx, by, safe_z, target_ori)
+        time.sleep(1.0)
+
+        log.info("[2] 컵 집기 시작")
         self.plan_pose(bx, by, pick_z, target_ori)
         self.gripper.close_gripper()
+        log.info("[2] 컵 집기 완료")
         time.sleep(1.0)
-        
 
-        # 3. 수직 리프트업 (마찰 회피)
-        log.info("[3] Lift Up (관절 꼬임 방지를 위해 높게 들어 올림)")
-        self.plan_pose(bx, by, pick_z + 0.25, target_ori)
-        
-        
+        log.info("[3] Lift Up (다시 바닥 기준 25cm 상공으로 리프트업)")
+        self.plan_pose(bx, by, safe_z, target_ori)
+        time.sleep(1.0)
 
-        # 4. 수직 자세(home_ori)로 회전 + 회전 반경 오프셋 보정
+        
+        log.info("[4] 동적 직립화 궤적 탐색 시작...")
+
+        quat_A = R.from_euler('xyz', [90, 0, np.degrees(cup_theta)], degrees=True).as_quat()
+        ori_A = {"x": float(quat_A[0]), "y": float(quat_A[1]), "z": float(quat_A[2]), "w": float(quat_A[3])}
+
+        quat_B = R.from_euler('xyz', [270, 0, np.degrees(cup_theta)], degrees=True).as_quat()
+        ori_B = {"x": float(quat_B[0]), "y": float(quat_B[1]), "z": float(quat_B[2]), "w": float(quat_B[3])}
+
         dx = (CUP_LENGTH_M / 2.0) * np.cos(cup_theta)
         dy = (CUP_LENGTH_M / 2.0) * np.sin(cup_theta)
-
         place_x = bx - dx
         place_y = by - dy
-        place_z = floor_z + (CUP_LENGTH_M / 2.0)
+        place_z = 0.07
 
+        log.info("-> 옵션 A(Roll=90) 경로 플래닝 시도 중...")
+        success = self.plan_pose(place_x, place_y, place_z + 0.15, ori_A)
+
+        if success:
+            log.info("=> 옵션 A 채택 성공! (관절 한계 안전)")
+            best_ori = ori_A
+        else:
+            log.warn("=> 옵션 A IK 실패. 옵션 B(Roll=270)로 우회 탐색합니다...")
+            success = self.plan_pose(place_x, place_y, place_z + 0.15, ori_B)
+            
+            if success:
+                log.info("=> 옵션 B 채택 성공! (안전한 반대 방향으로 컵을 세웁니다)")
+                best_ori = ori_B
+            else:
+                log.error("=> 치명적 오류: 양쪽 방향 모두 직립화 궤적 생성에 실패했습니다.")
+                return 
+
+        log.info("[4-1] 공중에서 컵 수직 정렬 완료")
         
-        # 4-1. 바닥에 닿기 전, 공중(place_z + 0.15)에서 컵을 먼저 수직으로 돌립니다.
-        log.info("[4-1] 공중에서 컵 수직 정렬")
-        self.plan_pose(place_x, place_y, place_z + 0.15, self.home_ori)
-
-        # 4-2. 수직을 유지한 채 바닥으로 수직 하강하여 안착합니다.
         log.info(f"[4-2] Z-Height Adjustment (Z: {place_z:.3f})")
-        self.plan_pose(place_x, place_y, place_z + 0.02, self.home_ori)
+        self.plan_pose(place_x, place_y, place_z + 0.02, best_ori)
         
-        # 5. 조심스럽게 완전히 바닥에 닿은 후 릴리즈
         log.info("[5] Place & Release")
-        self.plan_pose(place_x, place_y, place_z, self.home_ori)
+        self.plan_pose(place_x, place_y, place_z, best_ori)
         self.gripper.open_gripper()
         time.sleep(1.0)
-
         
-        # 6. 안전 상공 복귀
         log.info("[6] Retract")
-        self.plan_pose(place_x, place_y, place_z + 0.1, self.home_ori)
+        self.plan_pose(place_x, place_y, place_z + 0.15, best_ori)
         log.info("== 시퀀스 완료 ==")
-    
-    # ==========================================================
-    # [임시 테스트용] p키 입력 대기를 무시하고 자동 실행하는 함수
-
-    # ==========================================================
-    # def run(self):
-    #     import time
-    #     import rclpy
-    #     import numpy as np
-
-    #     self.get_logger().info("==== [자동 테스트 모드] ====")
-        
-    #     # 1. 로봇 초기화 및 Home 위치 이동 (부모 클래스의 필수 기능 실행)
-    #     if hasattr(self, 'initialize_home'):
-    #         self.initialize_home()
-            
-    #     self.get_logger().info("3초 뒤 컵 구출 시퀀스를 자동으로 시작합니다...")
-    #     time.sleep(3.0)
-        
-    #     # 2. 카메라가 없으므로 가상의 빈 이미지(dummy)를 만들어서 강제 전달
-    #     dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    #     self.detect_and_pick(dummy_frame)
-        
-    #     self.get_logger().info("==== [테스트 시퀀스 완료] ====")
-    #     self.get_logger().info("RViz 화면을 확인할 수 있도록 노드를 끄지 않고 유지합니다.")
-        
-    #     # 3. 모션이 끝나고 프로그램이 바로 꺼지지 않도록 대기 상태 유지
-    #     while rclpy.ok():
-    #         rclpy.spin_once(self, timeout_sec=0.1)
-
 
 def main(args=None):
     run_node(YoloCupUprightingNode)
