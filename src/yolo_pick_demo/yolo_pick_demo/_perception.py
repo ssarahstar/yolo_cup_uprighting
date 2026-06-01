@@ -154,3 +154,54 @@ def calculate_cup_orientation(depth_image, bbox, frame=None):
     # 7. Degree를 Radian으로 변환하여 반환
     theta = np.deg2rad(angle)
     return theta
+
+
+def is_top_pointing_towards_theta(frame, bbox, theta):
+    """
+    컵의 빨간 스티커(입구 부분)가 theta 방향에 있는지, 반대 방향인지 판별
+    """
+    if frame is None:
+        return True
+
+    x1, y1, x2, y2 = map(int, bbox)
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+    
+    roi = frame[y1:y2, x1:x2]
+    if roi.size == 0:
+        return True
+        
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    
+    # 빨간색 마스크 추출
+    lower_red1 = np.array([0, 100, 100])
+    upper_red1 = np.array([10, 255, 255])
+    lower_red2 = np.array([160, 100, 100])
+    upper_red2 = np.array([180, 255, 255])
+    
+    mask = cv2.inRange(hsv, lower_red1, upper_red1) + cv2.inRange(hsv, lower_red2, upper_red2)
+    
+    # 빨간색 픽셀들의 무게중심(Center of Mass) 계산
+    M = cv2.moments(mask)
+    if M["m00"] == 0:
+        return True 
+        
+    # ROI 내에서의 무게중심 좌표
+    cm_x = int(M["m10"] / M["m00"])
+    cm_y = int(M["m01"] / M["m00"])
+    
+    # ROI의 기하학적 중심 좌표
+    center_x = roi.shape[1] / 2.0
+    center_y = roi.shape[0] / 2.0
+    
+    # 1. 컵 중심에서 스티커(무게중심)를 향하는 벡터 생성
+    vec_sticker = np.array([cm_x - center_x, cm_y - center_y])
+    
+    # 2. theta 각도가 가리키는 단위 벡터 생성
+    vec_theta = np.array([np.cos(theta), np.sin(theta)])
+    
+    # 3. 두 벡터의 내적(Dot Product) 계산
+
+    dot_product = np.dot(vec_sticker, vec_theta)
+    
+    return dot_product > 0

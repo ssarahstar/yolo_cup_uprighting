@@ -13,11 +13,11 @@ BASE_FRAME = "base_link"
 EE_LINK    = "link_6"
 
 HOME_JOINTS = {
-    "joint_1": math.radians(0.0),
-    "joint_2": math.radians(0.0),
-    "joint_3": math.radians(90.0),
-    "joint_4": math.radians(0.0),
-    "joint_5": math.radians(90.0),
+    "joint_1": math.radians(3.0),
+    "joint_2": math.radians(-12.7),
+    "joint_3": math.radians(44.0),
+    "joint_4": math.radians(-9.0),
+    "joint_5": math.radians(133.0),
     "joint_6": math.radians(90.0),
 }
 
@@ -25,7 +25,7 @@ HOME_JOINTS = {
 SAFE_X_MIN = 0.0
 SAFE_Y_MIN = -0.30
 SAFE_Y_MAX =  0.30
-SAFE_Z_MIN =  0.01
+SAFE_Z_MIN =  0.02
 
 # ── Pick 파라미터 (m) ────────────────────────────────
 Z_OFFSET = 0.20    # gripper tip ↔ link_6 (depth 측정 base z + 이 값 = pick_z)
@@ -44,11 +44,6 @@ TOOLCHARGER_PORT = 502
 YOLO_MODEL_PATH = "/home/ssu/yolo_cup_ws/best.pt"
 YOLO_CONF_THRESH   = 0.5
 AUTO_PICK_INTERVAL = 3.0    # 자동 모드 픽 간격 [s]
-
-# ── 클래스 ID (v3 data.yaml: ['block', 'box', 'gear']) ──
-CLS_BLOCK = 0
-CLS_BOX   = 1
-CLS_GEAR  = 2
 
 # ── 카메라 토픽 ──────────────────────────────────────
 TOPIC_CAM_INFO  = "/camera/camera/color/camera_info"

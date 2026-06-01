@@ -9,7 +9,7 @@ import numpy as np
 
 from . import _config as cfg
 from ._base_node import BaseMoveItPickNode, run_node
-from ._perception import calculate_cup_orientation
+from ._perception import calculate_cup_orientation, is_top_pointing_towards_theta
 from ._motion import get_gripper_pose_by_cup
 from scipy.spatial.transform import Rotation as R
 
@@ -115,48 +115,24 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         else:
             cup_theta = calculate_cup_orientation(self.depth_image, target["box"], frame)
 
+       
+        # ==========================================================
+        
+        is_top = is_top_pointing_towards_theta(frame, target["box"], cup_theta)
+        
+        if not is_top:
+            log.info("[VISION] 컵이 반대로 누워있습니다. 카메라 상향 유지를 위해 파지 방향을 180도 뒤집습니다.")
+            cup_theta += np.pi  # 180도 회전
+        else:
+            log.info("[VISION] 컵이 정방향입니다. 기본 파지 방향을 유지합니다.")
+        # ==========================================================
+
         self.picking = True
         try:
             self._pick_and_straighten(bx, by, bz, cup_theta)
         finally:
             self.picking = False
 
-    
-        
-    # def move_to_observation_pose(self):
-
-    #     log = self.get_logger()
-    #     log.info("[Init] 테이블 관찰 자세로 이동 중...")
-        
-    #     # 1. 제시된 조인트 각도(도 단위) 및 라디안 변환
-    #     joint_deg = [3.0, -12.7, 44.0, -9.0, 133.0, 90.0]
-    #     joint_values = [np.deg2rad(angle) for angle in joint_deg]
-
-    #     # 2. manipulator 플래닝 컴포넌트 준비
-    #     arm_component = self.robot.get_planning_component("manipulator")
-    #     arm_component.set_start_state_to_current_state()
-        
-    #     goal_state = arm_component.get_start_state()
-        
-    #     # 가져온 상태 객체의 'manipulator' 관절 그룹에 목표 각도를 덮어씌웁니다.
-    #     goal_state.set_joint_group_positions("manipulator", joint_values)
-    #     goal_state.update() # 상태 갱신
-        
-    #     # 완성된 상태 객체를 플래너의 목표(Goal)로 설정합니다.
-    #     arm_component.set_goal_state(robot_state=goal_state)
-    #     # ==========================================================
-        
-    #     # 3. 경로 플래닝 및 실행
-    #     plan_result = arm_component.plan()
-
-    #     if plan_result:
-    #         log.info("관찰 자세 경로 생성 성공. 이동을 시작합니다.")
-    #         self.robot.execute("manipulator", plan_result.trajectory)
-    #         time.sleep(1.5) # 로봇이 완전히 멈출 때까지 대기
-    #         return True
-    #     else:
-    #         log.error("관찰 자세 플래닝 실패!")
-    #         return False
        
 
 
@@ -175,7 +151,7 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         PICK_CLEARANCE = 0.02 
         
         pick_z = floor_z + CUP_RADIUS_M + Z_OFFSET + PICK_CLEARANCE
-        place_z = floor_z + (CUP_LENGTH_M / 2.0) + Z_OFFSET
+        place_z = floor_z + (CUP_LENGTH_M / 2.0) 
         
         safe_z = floor_z + 0.25 + Z_OFFSET
         
@@ -218,42 +194,36 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         self.plan_pose(bx, by, safe_z, target_ori)
         time.sleep(1.0)
 
-        
-        log.info("[4] 동적 직립화 궤적 탐색 시작...")
-
-        quat_A = R.from_euler('xyz', [90, 0, np.degrees(cup_theta)], degrees=True).as_quat()
-        ori_A = {"x": float(quat_A[0]), "y": float(quat_A[1]), "z": float(quat_A[2]), "w": float(quat_A[3])}
-
-        quat_B = R.from_euler('xyz', [270, 0, np.degrees(cup_theta)], degrees=True).as_quat()
-        ori_B = {"x": float(quat_B[0]), "y": float(quat_B[1]), "z": float(quat_B[2]), "w": float(quat_B[3])}
+        # 4단계: 직립화 실행 (항상 카메라가 위를 향하는 Roll=90 고정)
+        log.info("[4] 컵 직립화 궤적 탐색 (카메라 상향 고정)...")
 
         dx = (CUP_LENGTH_M / 2.0) * np.cos(cup_theta)
         dy = (CUP_LENGTH_M / 2.0) * np.sin(cup_theta)
         place_x = bx - dx
         place_y = by - dy
-        place_z = 0.07
 
-        log.info("-> 옵션 A(Roll=90) 경로 플래닝 시도 중...")
-        success = self.plan_pose(place_x, place_y, place_z + 0.15, ori_A)
+        # 무조건 카메라가 위를 보는 자세(Roll=90) 쿼터니언 생성
+        target_roll = 90
+        quat_target = R.from_euler('xyz', [target_roll, 0, np.degrees(cup_theta)], degrees=True).as_quat()
+        ori_target = {"x": float(quat_target[0]), "y": float(quat_target[1]), "z": float(quat_target[2]), "w": float(quat_target[3])}
+
+        log.info("-> 카메라 상향(Roll=90) 궤적 플래닝 시도 중...")
+        success = self.plan_pose(place_x, place_y, place_z + 0.15, ori_target)
 
         if success:
-            log.info("=> 옵션 A 채택 성공! (관절 한계 안전)")
-            best_ori = ori_A
+            log.info("=> 카메라 상향 직립화 궤적 채택 성공!")
+            best_ori = ori_target
         else:
-            log.warn("=> 옵션 A IK 실패. 옵션 B(Roll=270)로 우회 탐색합니다...")
-            success = self.plan_pose(place_x, place_y, place_z + 0.15, ori_B)
-            
-            if success:
-                log.info("=> 옵션 B 채택 성공! (안전한 반대 방향으로 컵을 세웁니다)")
-                best_ori = ori_B
-            else:
-                log.error("=> 치명적 오류: 양쪽 방향 모두 직립화 궤적 생성에 실패했습니다.")
-                return 
+            log.error("=> 치명적 오류: 관절 한계로 인해 직립화 궤적 생성에 실패했습니다.")
+            return 
 
         log.info("[4-1] 공중에서 컵 수직 정렬 완료")
         
         log.info(f"[4-2] Z-Height Adjustment (Z: {place_z:.3f})")
         self.plan_pose(place_x, place_y, place_z + 0.02, best_ori)
+
+
+
         
         log.info("[5] Place & Release")
         self.plan_pose(place_x, place_y, place_z, best_ori)
