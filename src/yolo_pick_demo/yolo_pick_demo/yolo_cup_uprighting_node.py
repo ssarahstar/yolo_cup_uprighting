@@ -58,7 +58,7 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         log = self.get_logger()
         log.info("🚧 [안전망] YAML 기반 안전 환경(Keep-out Zone) 구축을 시작합니다...")
 
-        arm_component = self.robot.get_planning_component(cfg.GROUP_NAME)
+        #arm_component = self.robot.get_planning_component(cfg.GROUP_NAME)
         pub = self.create_publisher(CollisionObject, '/collision_object', 10)
         time.sleep(1.0)
 
@@ -66,7 +66,7 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         if cfg.SAFETY_CFG and 'motion' in cfg.SAFETY_CFG:
             bounds = cfg.SAFETY_CFG['motion']['workspace_bounds_m']
             
-            arm_component.set_workspace(
+            self.arm.set_workspace(
                 min_x=bounds['x_min'], min_y=bounds['y_min'], min_z=bounds['z_min'],
                 max_x=bounds['x_max'], max_y=bounds['y_max'], max_z=bounds['z_max']
             )
@@ -260,6 +260,7 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         dy = (CUP_LENGTH_M / 2.0) * np.sin(cup_theta)
         place_x = bx - dx
         place_y = by - dy
+        
 
 
         # 무조건 카메라가 위를 보는 자세(Roll=90) 쿼터니언 생성

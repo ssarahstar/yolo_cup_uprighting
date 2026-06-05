@@ -95,10 +95,10 @@ def plan_and_execute(robot, arm, logger,
         logger.error("Planning 실패")
         return False
 
-    robot.execute(group_name=cfg.GROUP_NAME,
+    result = robot.execute(group_name=cfg.GROUP_NAME,
                   robot_trajectory=plan_result.trajectory,
                   blocking=True)
-    return True
+    return bool(result)
 
 
 def get_gripper_pose_by_cup(cup_theta):
