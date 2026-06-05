@@ -13,6 +13,10 @@ from ._perception import calculate_cup_orientation, is_top_pointing_towards_thet
 from ._motion import get_gripper_pose_by_cup
 from scipy.spatial.transform import Rotation as R
 
+from moveit_msgs.msg import CollisionObject
+from shape_msgs.msg import SolidPrimitive
+from geometry_msgs.msg import Pose
+
 
 # =====================================================================
 # 테스트 토글: 카메라와 욜로가 없어도 모션을 테스트하려면 True로 설정
@@ -43,11 +47,66 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
 
     def __init__(self):
         super().__init__()
+        self.setup_safety_environment()
         #if USE_MOCK_VISION:
             #self.get_logger().info("가상 모드: 통신 우회를 위해 Mock Gripper를 활성화합니다.")
             #self.gripper = MockGripper()
             # Action Server가 완전히 준비될 때까지 약간의 대기 시간(딜레이)을 줍니다.
             #time.sleep(2.0)
+
+    def setup_safety_environment(self):
+        log = self.get_logger()
+        log.info("🚧 [안전망] YAML 기반 안전 환경(Keep-out Zone) 구축을 시작합니다...")
+
+        arm_component = self.robot.get_planning_component(cfg.GROUP_NAME)
+        pub = self.create_publisher(CollisionObject, '/collision_object', 10)
+        time.sleep(1.0)
+
+       
+        if cfg.SAFETY_CFG and 'motion' in cfg.SAFETY_CFG:
+            bounds = cfg.SAFETY_CFG['motion']['workspace_bounds_m']
+            
+            arm_component.set_workspace(
+                min_x=bounds['x_min'], min_y=bounds['y_min'], min_z=bounds['z_min'],
+                max_x=bounds['x_max'], max_y=bounds['y_max'], max_z=bounds['z_max']
+            )
+            log.info(f"-> 작업 영역 동적 제한 완료 (Z_min: {bounds['z_min']}m)")
+        else:
+            log.warn("-> safety.yaml을 찾을 수 없어 기본 작업 영역 제한을 건너뜁니다.")
+        
+
+       
+        if cfg.DISPENSER_CFG and 'estimated_collision_objects' in cfg.DISPENSER_CFG:
+            # YAML에서 데이터 추출
+            disp_data = cfg.DISPENSER_CFG['estimated_collision_objects']['dispenser_combined_body_box']
+
+            dispenser = CollisionObject()
+            dispenser.header.frame_id = disp_data.get('frame_id', 'base_link')
+            dispenser.id = "dispenser_combined_body_box"
+            dispenser.operation = CollisionObject.ADD
+
+            disp_box = SolidPrimitive()
+            disp_box.type = SolidPrimitive.BOX
+            # YAML의 리스트 배열을 그대로 가져옴
+            disp_box.dimensions = disp_data['size_xyz_m']
+
+            disp_pose = Pose()
+            disp_pose.position.x = disp_data['center_xyz_m'][0]
+            disp_pose.position.y = disp_data['center_xyz_m'][1]
+            disp_pose.position.z = disp_data['center_xyz_m'][2]
+            
+            disp_pose.orientation.x = disp_data['orientation_xyzw'][0]
+            disp_pose.orientation.y = disp_data['orientation_xyzw'][1]
+            disp_pose.orientation.z = disp_data['orientation_xyzw'][2]
+            disp_pose.orientation.w = disp_data['orientation_xyzw'][3]
+
+            dispenser.primitives.append(disp_box)
+            dispenser.primitive_poses.append(disp_pose)
+            
+            pub.publish(dispenser)
+            log.info("-> YAML 기반 디스펜서 장애물 동적 등록 완료!")
+        else:
+            log.warn("-> 디스펜서 설정 파일을 찾을 수 없어 장애물 등록을 건너뜁니다.")
 
     
     def _select_target(self, detections):
@@ -201,6 +260,7 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         dy = (CUP_LENGTH_M / 2.0) * np.sin(cup_theta)
         place_x = bx - dx
         place_y = by - dy
+
 
         # 무조건 카메라가 위를 보는 자세(Roll=90) 쿼터니언 생성
         target_roll = 90

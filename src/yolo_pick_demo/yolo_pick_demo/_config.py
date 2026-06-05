@@ -1,10 +1,31 @@
-"""공통 상수.
-
-모든 MoveIt 기반 노드가 공유하는 로봇/그리퍼/카메라/YOLO 설정.
-노드별 고유 상수(슬롯 위치, scan offset 등)는 각 노드 파일에 둔다.
-"""
 
 import math
+import os
+import yaml
+from ament_index_python.packages import get_package_share_directory
+
+
+PKG_SHARE = get_package_share_directory('yolo_pick_demo')
+
+
+def load_yaml(file_name):
+    file_path = os.path.join(PKG_SHARE, 'config', file_name)
+    with open(file_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+
+try:
+    SAFETY_CFG = load_yaml('safety.yaml')
+except Exception as e:
+    print(f"[경고] safety.yaml을 불러오지 못했습니다: {e}")
+    SAFETY_CFG = None
+
+
+try:
+    DISPENSER_CFG = load_yaml('measured_dispenser_collision.yaml')
+except Exception as e:
+    print(f"[경고] measured_dispenser_collision.yaml을 불러오지 못했습니다: {e}")
+    DISPENSER_CFG = None
 
 
 # ── MoveIt ─────────────────────────────────────────
@@ -21,15 +42,10 @@ HOME_JOINTS = {
     "joint_6": math.radians(90.0),
 }
 
-# ── 안전 작업 영역 (m, base_link) ────────────────────
-SAFE_X_MIN = 0.0
-SAFE_Y_MIN = -0.30
-SAFE_Y_MAX =  0.30
-SAFE_Z_MIN =  0.02
 
 # ── Pick 파라미터 (m) ────────────────────────────────
 Z_OFFSET = 0.20    # gripper tip ↔ link_6 (depth 측정 base z + 이 값 = pick_z)
-SAFE_Z   = 0.40    # 안전 이동 높이
+
 
 # ── Approach (재검출 직전 EE 미세 이동) ──────────────
 APPROACH_OFFSET = (-0.05, -0.05)   # (dx, dy) m, Z 는 현재 유지
@@ -41,7 +57,7 @@ TOOLCHARGER_IP   = "192.168.1.1"
 TOOLCHARGER_PORT = 502
 
 # ── YOLO ────────────────────────────────────────────
-YOLO_MODEL_PATH = "/home/ssu/yolo_cup_ws/best.pt"
+YOLO_MODEL_PATH = os.path.join(PKG_SHARE, 'config', 'best.pt')
 YOLO_CONF_THRESH   = 0.5
 AUTO_PICK_INTERVAL = 3.0    # 자동 모드 픽 간격 [s]
 

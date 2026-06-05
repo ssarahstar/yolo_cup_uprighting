@@ -119,7 +119,7 @@ def run_yolo(yolo, frame: np.ndarray, depth_image=None) -> list[dict]:
 
 def calculate_cup_orientation(depth_image, bbox, frame=None):
     """
-    OpenCV를 이용해 Bounding Box 내부의 실제 컵 기울기(theta)를 정밀 추출합니다.
+    OpenCV를 이용해 Bounding Box 내부의 실제 컵 기울기(theta)를 정밀 추출
     """
     if frame is None:
         return 0.0

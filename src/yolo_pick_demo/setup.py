@@ -13,7 +13,7 @@ setup(
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         (
             'share/' + package_name + '/config',
-            glob('config/*.yaml') + glob('yolo_pick_demo/*.npy')
+            glob('config/*.yaml') + glob('config/*.pt') + glob('yolo_pick_demo/*.npy')
         ),
         ('share/' + package_name, ['package.xml']),
     ],
@@ -28,7 +28,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'yolo_pick_moveit = yolo_pick_demo.yolo_pick_moveit_node:main',
+           
             'yolo_cup_uprighting = yolo_pick_demo.yolo_cup_uprighting_node:main',
         ],
     },

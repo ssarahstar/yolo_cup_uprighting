@@ -30,7 +30,7 @@ def generate_launch_description():
     yolo_cup_uprighting_node = Node(
         package="yolo_pick_demo",
         executable="yolo_cup_uprighting",
-        name="yolo_cup_uprighting_py", # MoveItPy 초기화를 위해 소스 코드와 이름 일치
+        name="yolo_cup_uprighting_py", 
         output="screen",
         parameters=[
             moveit_config.to_dict(),

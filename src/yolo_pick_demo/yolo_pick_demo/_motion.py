@@ -6,22 +6,47 @@ from scipy.spatial.transform import Rotation as R
 from . import _config as cfg
 
 
-def clamp_to_safe_workspace(x, y, z, logger):
-    """SAFE_* 상수 범위로 클램핑하고 경고 로그."""
-    if x < cfg.SAFE_X_MIN:
-        logger.warning(f"x={x:.3f} -> {cfg.SAFE_X_MIN}")
-        x = cfg.SAFE_X_MIN
-    if y < cfg.SAFE_Y_MIN:
-        logger.warning(f"y={y:.3f} -> {cfg.SAFE_Y_MIN}")
-        y = cfg.SAFE_Y_MIN
-    elif y > cfg.SAFE_Y_MAX:
-        logger.warning(f"y={y:.3f} -> {cfg.SAFE_Y_MAX}")
-        y = cfg.SAFE_Y_MAX
-    if z < cfg.SAFE_Z_MIN:
-        logger.warning(f"z={z:.3f} -> {cfg.SAFE_Z_MIN}")
-        z = cfg.SAFE_Z_MIN
-    return x, y, z
 
+def clamp_to_safe_workspace(x, y, z, logger):
+    """safety.yaml 범위로 클램핑하고 경고 로그 (X, Y, Z 상/하한 모두 적용)."""
+    
+    # 안전 설정 파일이 제대로 로드되지 않았을 경우를 대비한 방어 코드
+    if not cfg.SAFETY_CFG or 'motion' not in cfg.SAFETY_CFG:
+        logger.error("SAFETY_CFG가 로드되지 않아 클램핑을 건너뜁니다.")
+        return x, y, z
+
+    # YAML 데이터에서 작업 영역 경계선 가져오기
+    bounds = cfg.SAFETY_CFG['motion']['workspace_bounds_m']
+    
+    safe_x_min, safe_x_max = bounds['x_min'], bounds['x_max']
+    safe_y_min, safe_y_max = bounds['y_min'], bounds['y_max']
+    safe_z_min, safe_z_max = bounds['z_min'], bounds['z_max']
+
+    # X축 클램핑
+    if x < safe_x_min:
+        logger.warning(f"x={x:.3f} -> {safe_x_min} (X 최소 한계 도달)")
+        x = safe_x_min
+    elif x > safe_x_max:
+        logger.warning(f"x={x:.3f} -> {safe_x_max} (X 최대 한계 도달)")
+        x = safe_x_max
+
+    # Y축 클램핑
+    if y < safe_y_min:
+        logger.warning(f"y={y:.3f} -> {safe_y_min} (Y 최소 한계 도달)")
+        y = safe_y_min
+    elif y > safe_y_max:
+        logger.warning(f"y={y:.3f} -> {safe_y_max} (Y 최대 한계 도달)")
+        y = safe_y_max
+
+    # Z축 클램핑
+    if z < safe_z_min:
+        logger.warning(f"z={z:.3f} -> {safe_z_min} (Z 최소 한계 도달)")
+        z = safe_z_min
+    elif z > safe_z_max:
+        logger.warning(f"z={z:.3f} -> {safe_z_max} (Z 최대 한계 도달)")
+        z = safe_z_max
+
+    return x, y, z
 
 def make_pose(x, y, z, ori) -> PoseStamped:
     """(x, y, z) + orientation dict → PoseStamped(base_link)."""
