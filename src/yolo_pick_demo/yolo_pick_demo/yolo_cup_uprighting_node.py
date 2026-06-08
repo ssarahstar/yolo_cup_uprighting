@@ -18,26 +18,10 @@ from shape_msgs.msg import SolidPrimitive
 from geometry_msgs.msg import Pose
 
 
-# =====================================================================
-# 테스트 토글: 카메라와 욜로가 없어도 모션을 테스트하려면 True로 설정
-USE_MOCK_VISION = False
-# =====================================================================
 
 CUP_LENGTH_M = 0.12  
 CUP_DIAMETER_M = 0.072 
 CUP_RADIUS_M   = CUP_DIAMETER_M / 2.0 
-
-
-class MockGripper:
-    """가상 환경 테스트를 위해 실제 Modbus 통신을 우회하는 가짜 그리퍼 클래스"""
-    def open_gripper(self):
-        print("[Mock Gripper] 가상 그리퍼 열림 (110mm)")
-        
-    def close_gripper(self):
-        print("[Mock Gripper] 가상 그리퍼 닫힘")
-        
-    def move_gripper(self, width, force=None):
-        print(f"[Mock Gripper] 가상 그리퍼 너비 이동 -> {width/10.0}mm")
 
 
 class YoloCupUprightingNode(BaseMoveItPickNode):
@@ -48,17 +32,11 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
     def __init__(self):
         super().__init__()
         self.setup_safety_environment()
-        #if USE_MOCK_VISION:
-            #self.get_logger().info("가상 모드: 통신 우회를 위해 Mock Gripper를 활성화합니다.")
-            #self.gripper = MockGripper()
-            # Action Server가 완전히 준비될 때까지 약간의 대기 시간(딜레이)을 줍니다.
-            #time.sleep(2.0)
 
     def setup_safety_environment(self):
         log = self.get_logger()
         log.info("🚧 [안전망] YAML 기반 안전 환경(Keep-out Zone) 구축을 시작합니다...")
 
-        #arm_component = self.robot.get_planning_component(cfg.GROUP_NAME)
         pub = self.create_publisher(CollisionObject, '/collision_object', 10)
         time.sleep(1.0)
 
@@ -77,7 +55,7 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
 
        
         if cfg.DISPENSER_CFG and 'estimated_collision_objects' in cfg.DISPENSER_CFG:
-            # YAML에서 데이터 추출
+            
             disp_data = cfg.DISPENSER_CFG['estimated_collision_objects']['dispenser_combined_body_box']
 
             dispenser = CollisionObject()
@@ -87,7 +65,7 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
 
             disp_box = SolidPrimitive()
             disp_box.type = SolidPrimitive.BOX
-            # YAML의 리스트 배열을 그대로 가져옴
+     
             disp_box.dimensions = disp_data['size_xyz_m']
 
             disp_pose = Pose()
@@ -123,28 +101,6 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
             
         return max(target_candidates, key=lambda d: d["conf"])
     
-    
-    def run_yolo(self, frame):
-        """MOCK 모드일 경우 가상의 쓰러진 컵 데이터를 반환, 아니면 부모(진짜 YOLO) 호출"""
-        if USE_MOCK_VISION:
-            return [{
-                "cx": 320, "cy": 240, "conf": 0.95,
-                "cls_id": 99, "cls_name": "toppled_cup",
-                "box": (200, 150, 440, 330), # 가로로 누워있는 가상의 바운딩 박스
-                "size": 240, "depth": 0.5
-            }]
-        else:
-            return super().run_yolo(frame)
-
-    def pixel_to_base(self, px, py):
-        """MOCK 모드일 경우 가상의 3D 공간 좌표 반환, 아니면 진짜 카메라 Depth 매핑 호출"""
-        if USE_MOCK_VISION:
-        
-            # 실제 추출된 X: 0.487m, Y: -0.022m
-            # 역산된 컵 표면 Z: 0.051m
-            return (0.487, -0.022, 0.051)
-        else:
-            return super().pixel_to_base(px, py)
         
 
     def detect_and_pick(self, frame: np.ndarray):
@@ -167,12 +123,8 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
             return
         bx, by, bz = base
         
-        # 각도 추출
-        if USE_MOCK_VISION:
-        
-            cup_theta = np.radians(-116.91)
-        else:
-            cup_theta = calculate_cup_orientation(self.depth_image, target["box"], frame)
+      
+        cup_theta = calculate_cup_orientation(self.depth_image, target["box"], frame)
 
        
         # ==========================================================
@@ -253,7 +205,7 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         self.plan_pose(bx, by, safe_z, target_ori)
         time.sleep(1.0)
 
-        # 4단계: 직립화 실행 (항상 카메라가 위를 향하는 Roll=90 고정)
+        # 직립화 실행 (항상 카메라가 위를 향하는 Roll=90 고정)
         log.info("[4] 컵 직립화 궤적 탐색 (카메라 상향 고정)...")
 
         dx = (CUP_LENGTH_M / 2.0) * np.cos(cup_theta)
@@ -282,8 +234,6 @@ class YoloCupUprightingNode(BaseMoveItPickNode):
         
         log.info(f"[4-2] Z-Height Adjustment (Z: {place_z:.3f})")
         self.plan_pose(place_x, place_y, place_z + 0.02, best_ori)
-
-
 
         
         log.info("[5] Place & Release")
